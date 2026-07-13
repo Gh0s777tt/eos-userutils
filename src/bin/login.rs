@@ -117,6 +117,38 @@ fn load_config_schemes(user: &User<redox_users::auth::Full>) -> Option<Vec<Strin
         .map(|cfg| cfg.schemes.clone())
 }
 
+// E-OS R-602: force a fresh password for an account still using a shipped default
+// (blank for `user`, "password" for `root`) before the shell starts. `login` runs
+// as root here, so `passwd <name>` sets it without asking for the old password.
+fn force_first_boot_passwd(
+    uname: &str,
+    reason: &str,
+    still_default: impl Fn(&User<redox_users::auth::Full>) -> bool,
+) {
+    use std::io::Write;
+    let mut out = io::stdout();
+    loop {
+        let _ = write!(
+            out,
+            "\n\x1B[1mE-OS first-boot setup\x1B[0m\nThe account '{}' {}. Set a new password to continue.\n",
+            uname, reason
+        );
+        let _ = out.flush();
+        let _ = std::process::Command::new("passwd").arg(uname).status();
+        let still = AllUsers::authenticator(Config::default())
+            .ok()
+            .and_then(|users| users.get_by_name(uname).map(|u| still_default(u)))
+            .unwrap_or(false);
+        if !still {
+            let _ = write!(out, "Password set.\n");
+            let _ = out.flush();
+            break;
+        }
+        let _ = write!(out, "The default password must be changed to continue.\n");
+        let _ = out.flush();
+    }
+}
+
 pub fn main() {
     let mut stdout = io::stdout();
     let mut stderr = io::stderr();
@@ -156,32 +188,12 @@ pub fn main() {
                 Some(user) => {
                     if user.is_passwd_blank() {
                         // E-OS R-602: first-boot setup — a blank-password account
-                        // must set a password before the shell starts. This retires
-                        // the shipped default passwordless `user`, so a booted or
-                        // stolen image (even behind FDE, once unlocked) is not wide
-                        // open. `login` runs as root here, so `passwd <name>` sets
-                        // the account's password without asking for an old one.
-                        let uname = user.user.clone();
-                        loop {
-                            let _ = write!(
-                                stdout,
-                                "\n\x1B[1mE-OS first-boot setup\x1B[0m\nThe account '{}' has no password. Set one now to continue.\n",
-                                uname
-                            );
-                            let _ = stdout.flush();
-                            let _ = std::process::Command::new("passwd").arg(&uname).status();
-                            let still_blank = AllUsers::authenticator(Config::default())
-                                .ok()
-                                .and_then(|u| u.get_by_name(&uname).map(|x| x.is_passwd_blank()))
-                                .unwrap_or(false);
-                            if !still_blank {
-                                let _ = write!(stdout, "Password set.\n");
-                                let _ = stdout.flush();
-                                break;
-                            }
-                            let _ = write!(stdout, "No password was set — you must set one to log in.\n");
-                            let _ = stdout.flush();
-                        }
+                        // (the shipped passwordless `user`) must set a password
+                        // before the shell starts, so a booted or stolen image
+                        // (even behind FDE, once unlocked) is not wide open.
+                        force_first_boot_passwd(&user.user, "has no password", |u| {
+                            u.is_passwd_blank()
+                        });
                         if let Ok(mut motd) = File::open(MOTD_FILE) {
                             io::copy(&mut motd, &mut stdout).r#try(&mut stderr);
                             stdout.flush().r#try(&mut stderr);
@@ -212,6 +224,17 @@ pub fn main() {
                         stdout.flush().r#try(&mut stderr);
 
                         if user.verify_passwd(&password) {
+                            // E-OS R-602: an account still on the shipped default
+                            // password ("password", e.g. `root`) must change it
+                            // before the shell — this is order-independent, so it
+                            // fires whenever the default is actually used.
+                            if password == "password" {
+                                force_first_boot_passwd(
+                                    &user.user,
+                                    "is using the default password",
+                                    |u| u.verify_passwd("password"),
+                                );
+                            }
                             if let Ok(mut motd) = File::open(MOTD_FILE) {
                                 io::copy(&mut motd, &mut stdout).r#try(&mut stderr);
                                 stdout.flush().r#try(&mut stderr);
