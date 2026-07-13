@@ -155,6 +155,33 @@ pub fn main() {
                 }
                 Some(user) => {
                     if user.is_passwd_blank() {
+                        // E-OS R-602: first-boot setup — a blank-password account
+                        // must set a password before the shell starts. This retires
+                        // the shipped default passwordless `user`, so a booted or
+                        // stolen image (even behind FDE, once unlocked) is not wide
+                        // open. `login` runs as root here, so `passwd <name>` sets
+                        // the account's password without asking for an old one.
+                        let uname = user.user.clone();
+                        loop {
+                            let _ = write!(
+                                stdout,
+                                "\n\x1B[1mE-OS first-boot setup\x1B[0m\nThe account '{}' has no password. Set one now to continue.\n",
+                                uname
+                            );
+                            let _ = stdout.flush();
+                            let _ = std::process::Command::new("passwd").arg(&uname).status();
+                            let still_blank = AllUsers::authenticator(Config::default())
+                                .ok()
+                                .and_then(|u| u.get_by_name(&uname).map(|x| x.is_passwd_blank()))
+                                .unwrap_or(false);
+                            if !still_blank {
+                                let _ = write!(stdout, "Password set.\n");
+                                let _ = stdout.flush();
+                                break;
+                            }
+                            let _ = write!(stdout, "No password was set — you must set one to log in.\n");
+                            let _ = stdout.flush();
+                        }
                         if let Ok(mut motd) = File::open(MOTD_FILE) {
                             io::copy(&mut motd, &mut stdout).r#try(&mut stderr);
                             stdout.flush().r#try(&mut stderr);
