@@ -35,7 +35,14 @@ const ISSUE_FILE: &'static str = "/etc/issue";
 const MOTD_FILE: &'static str = "/etc/motd";
 
 // TODO: Move to redox_users once the definition solidifies.
-const DEFAULT_SCHEMES: [&'static str; 26] = [
+// The fallback used when /etc/login_schemes.toml is missing or unparseable. It must not
+// be more permissive than the config it stands in for: a parse error is exactly the
+// moment you least want to widen a user's authority. `ip` (smoltcp RawSocket — arbitrary
+// IP packets, spoofing, and a complete bypass of any packet filter above the raw layer)
+// is deliberately absent here. `icmp` stays: `ping` opens `icmp:echo/<host>/ttl` and is
+// shipped in netutils, so dropping it would take ping away from ordinary users to close
+// a much narrower hole than `ip`.
+const DEFAULT_SCHEMES: [&'static str; 25] = [
     // Kernel schemes
     "debug",
     "event",
@@ -51,7 +58,6 @@ const DEFAULT_SCHEMES: [&'static str; 26] = [
     "zero",
     "log",
     // Network schemes
-    "ip",
     "icmp",
     "tcp",
     "udp",
