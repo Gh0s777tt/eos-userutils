@@ -144,13 +144,29 @@ pub fn getpty(columns: u16, lines: u16) -> (RawFd, String) {
 }
 
 // termion cursor_pos prone to error and does not work on nonblocking files
-fn tty_cursor_pos(tty: &mut File) -> Result<(u16, u16), Box<dyn Error>> {
+/// Ask the terminal where the cursor is, WITHOUT eating anything the user typed meanwhile.
+///
+/// E-OS: the old version read from the TTY for 500 ms and dropped every byte that was not the
+/// `R` terminating a cursor-position reply. On a real terminal the reply lands in microseconds
+/// and nothing else is in flight, so that was invisible. On a SERIAL console there is no
+/// terminal on the other end to answer `\x1B[6n` at all -- so the loop always ran the full
+/// 500 ms, and anything typed in that window was read and thrown away.
+///
+/// Measured 2026-09-02 driving the installer over QEMU's serial socket: the `root` typed at the
+/// login prompt vanished, `login` never got a username, and the password that followed was
+/// echoed into a fresh login prompt and rejected. Typing SLOWER made it worse, which is the
+/// signature of a window being hit rather than a buffer overflowing.
+///
+/// Bytes that are not part of the reply are appended to `pending` so the caller can give them
+/// back. Dropping user input silently is the defect; the timeout is not.
+fn tty_cursor_pos(tty: &mut File, pending: &mut Vec<u8>) -> Result<(u16, u16), Box<dyn Error>> {
     write!(tty, "\x1B[6n")?;
     tty.flush()?;
 
     let timeout = Duration::from_millis(500);
     let instant = Instant::now();
     let mut data = String::new();
+    let mut got_reply = false;
     while instant.elapsed() < timeout {
         let mut bytes = [0];
         match tty.read(&mut bytes) {
@@ -158,6 +174,7 @@ fn tty_cursor_pos(tty: &mut File) -> Result<(u16, u16), Box<dyn Error>> {
                 if count == 1 {
                     let c = bytes[0] as char;
                     if c == 'R' {
+                        got_reply = true;
                         break;
                     }
                     data.push(c);
@@ -165,17 +182,35 @@ fn tty_cursor_pos(tty: &mut File) -> Result<(u16, u16), Box<dyn Error>> {
             }
             Err(err) => {
                 if err.kind() != ErrorKind::WouldBlock {
+                    // Whatever was read before the error is still the user's.
+                    pending.extend_from_slice(data.as_bytes());
                     return Err(err.into());
                 }
             }
         }
     }
 
-    if data.is_empty() {
+    // No reply at all: every byte read is the user's, and none of it is ours to discard.
+    if !got_reply {
+        pending.extend_from_slice(data.as_bytes());
         return Err("cursor position timed out".into());
     }
 
-    let beg = data.rfind('[').ok_or("failed to find [")?;
+    if data.is_empty() {
+        return Err("cursor position reply was empty".into());
+    }
+
+    // The reply is ESC [ row ; col R. Anything BEFORE the last ESC-[ arrived from the user
+    // while we were waiting, and has to be handed back rather than parsed or dropped.
+    let beg = match data.rfind('[') {
+        Some(i) => i,
+        None => {
+            pending.extend_from_slice(data.as_bytes());
+            return Err("failed to find [".into());
+        }
+    };
+    let esc = data[..beg].rfind('\x1B').unwrap_or(beg);
+    pending.extend_from_slice(data[..esc].as_bytes());
     let coords: String = data.chars().skip(beg + 1).collect();
     let mut nums = coords.split(';');
 
@@ -185,14 +220,17 @@ fn tty_cursor_pos(tty: &mut File) -> Result<(u16, u16), Box<dyn Error>> {
     Ok((col, row))
 }
 
-fn tty_columns_lines(tty: &mut File) -> Result<(u16, u16), Box<dyn Error>> {
+fn tty_columns_lines(
+    tty: &mut File,
+    pending: &mut Vec<u8>,
+) -> Result<(u16, u16), Box<dyn Error>> {
     write!(tty, "{}", termion::cursor::Save)?;
     tty.flush()?;
 
     write!(tty, "{}", termion::cursor::Goto(999, 999))?;
     tty.flush()?;
 
-    let res = tty_cursor_pos(tty);
+    let res = tty_cursor_pos(tty, pending);
 
     write!(tty, "{}", termion::cursor::Restore)?;
     tty.flush()?;
@@ -201,10 +239,19 @@ fn tty_columns_lines(tty: &mut File) -> Result<(u16, u16), Box<dyn Error>> {
 }
 
 fn daemon(tty: &mut File, clear: bool, contain: bool, stderr: &mut Stderr) {
-    let (columns, lines) = tty_columns_lines(tty).unwrap_or((DEFAULT_COLS, DEFAULT_LINES));
+    // Anything typed while the terminal-size probe was waiting belongs to whoever typed it.
+    // The probe used to swallow it; now it hands it back here and it is replayed into the pty,
+    // so `login` reads it as if the probe had never run.
+    let mut pending = Vec::new();
+    let (columns, lines) =
+        tty_columns_lines(tty, &mut pending).unwrap_or((DEFAULT_COLS, DEFAULT_LINES));
     let tty_fd = tty.as_raw_fd();
 
     let (master_fd, pty) = getpty(columns, lines);
+
+    if !pending.is_empty() {
+        let _ = redox::write(master_fd as usize, &pending);
+    }
 
     let mut event_queue = event::RawEventQueue::new().expect("getty: failed to open event queue");
 
