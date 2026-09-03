@@ -568,6 +568,58 @@ fn password_guidance(problems: &[Problem], score: u8) -> &'static str {
     }
 }
 
+/// Turn a [`Verdict`] into the lines a caller should print, in order.
+///
+/// WHY THIS LIVES IN THE LIBRARY AND NOT IN `passwd`. The binaries of this crate cannot be built
+/// on a developer host at all -- `libredox` has no macOS target -- so anything placed in
+/// `src/bin/` is unreachable by `cargo test` and provable only by building a Redox image. Moving
+/// the DECISION and its wording here leaves the binary a thin caller (assess, verdict, print,
+/// exit) and puts the part worth testing where `credpolicy-hostcheck` already runs it.
+///
+/// The rendering is the same for every caller by construction, which is what `R-602f` asks for:
+/// `passwd`, the greeter and the installer cannot drift apart in what they tell a person, because
+/// they do not each write it.
+///
+/// Returns `(lines, accepted)`. `accepted` is false only for [`Verdict::Reject`]; a relaxed
+/// acceptance still returns lines, and the caller must print them -- an escape nobody sees used is
+/// an escape that becomes permanent.
+pub fn render_verdict(verdict: &Verdict, lang: guidance::Lang) -> (Vec<String>, bool) {
+    match verdict {
+        Verdict::Accept => (Vec::new(), true),
+        Verdict::AcceptRelaxed {
+            waived,
+            guidance: key,
+        } => {
+            let mut lines = vec![guidance::text(key, lang).to_string()];
+            lines.extend(waived.iter().map(describe_problem));
+            (lines, true)
+        }
+        Verdict::Reject {
+            problems,
+            guidance: key,
+        } => {
+            let mut lines = vec![guidance::text(key, lang).to_string()];
+            lines.extend(problems.iter().map(describe_problem));
+            (lines, false)
+        }
+    }
+}
+
+/// One short line per problem. Deliberately not `Debug`: a person reading `TooShort { min: 12 }`
+/// learns the rule exists but not what to do, and this text is the only thing most people will
+/// ever read about the policy.
+fn describe_problem(problem: &Problem) -> String {
+    match problem {
+        Problem::TooShort { min } => {
+            format!("za krotkie: potrzeba co najmniej {min} znakow")
+        }
+        Problem::Blocklisted => {
+            "to haslo jest na liscie najczesciej uzywanych - zgadywarka zaczyna od niej".to_string()
+        }
+        other => format!("{other:?}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1126,6 +1178,58 @@ mod tests {
         let a = assess_password("xkq7wm2ptz9lr4");
         let ratio = 2_f64.powf(a.entropy_bits) / a.expected_guesses();
         assert!((1.99..2.01).contains(&ratio), "ratio = {ratio}");
+    }
+
+    #[test]
+    fn render_accept_says_nothing() {
+        let (lines, accepted) = render_verdict(&Verdict::Accept, guidance::Lang::Pl);
+        assert!(accepted);
+        assert!(
+            lines.is_empty(),
+            "an accepted password should print nothing: {lines:?}"
+        );
+    }
+
+    #[test]
+    fn render_reject_leads_with_guidance_then_lists_every_problem() {
+        let assessment = assess_password("eos");
+        let verdict = PasswordPolicy::strict().verdict(&assessment);
+        let (lines, accepted) = render_verdict(&verdict, guidance::Lang::Pl);
+        assert!(!accepted, "three characters must be refused");
+        assert!(
+            lines.len() >= 2,
+            "guidance plus at least one problem: {lines:?}"
+        );
+        assert!(
+            lines[1..].iter().any(|l| l.contains("12")),
+            "the refusal must say what the floor is: {lines:?}"
+        );
+    }
+
+    #[test]
+    fn render_relaxed_still_speaks() {
+        // The escape must never be silent. Built by hand rather than through the environment so
+        // the test does not depend on process-wide state.
+        let verdict = Verdict::AcceptRelaxed {
+            waived: vec![Problem::TooShort { min: 12 }],
+            guidance: "cred.pw.waived_by_env",
+        };
+        let (lines, accepted) = render_verdict(&verdict, guidance::Lang::Pl);
+        assert!(accepted);
+        assert!(
+            !lines.is_empty(),
+            "a waived acceptance must still print why"
+        );
+    }
+
+    #[test]
+    fn problems_are_described_not_debug_printed() {
+        let text = describe_problem(&Problem::TooShort { min: 12 });
+        assert!(
+            !text.contains("TooShort"),
+            "a person should not read a Rust variant: {text}"
+        );
+        assert!(text.contains("12"));
     }
 
     #[test]

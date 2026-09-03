@@ -193,5 +193,34 @@ fn ask_new_password(
         eprintln!("passwd: new password does not match confirm password");
         exit(1);
     }
+
+    enforce_policy(&new_password, &mut stderr);
     new_password
+}
+
+/// Apply the shipped credential policy to a password about to be SET.
+///
+/// WHY HERE AND NOWHERE ELSE ON THIS PATH. `ask_new_password` is the single funnel: both the
+/// self-service branch and the root branch call it, so one insertion point covers `passwd`
+/// entirely. Putting the same check in `login` would be a different and much worse thing --
+/// `login` VERIFIES an existing password, and a floor applied there locks out every account
+/// created before the floor existed. A policy belongs where a secret is chosen, not where it
+/// is presented.
+///
+/// The wording lives in `credpolicy::render_verdict`, not here. The binaries of this crate
+/// cannot be built on a developer host (`libredox` has no macOS target), so anything written in
+/// `src/bin/` is provable only by building a Redox image; the decision and its text sit in the
+/// library, where `credpolicy-hostcheck` runs them. It is also what keeps `passwd`, the greeter
+/// and the installer saying the same thing (`R-602f`) -- they do not each write it.
+fn enforce_policy(password: &str, stderr: &mut io::Stderr) {
+    use userutils::credpolicy::{PasswordPolicy, assess_password, guidance, render_verdict};
+
+    let verdict = PasswordPolicy::from_env().verdict(&assess_password(password));
+    let (lines, accepted) = render_verdict(&verdict, guidance::Lang::Pl);
+    for line in &lines {
+        let _ = writeln!(stderr, "passwd: {line}");
+    }
+    if !accepted {
+        exit(1);
+    }
 }
