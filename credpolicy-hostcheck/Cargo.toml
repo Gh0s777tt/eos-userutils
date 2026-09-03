@@ -1,0 +1,34 @@
+# Why this crate exists.
+#
+# `src/credpolicy/` is a `[lib]` target of the `userutils` package, and that package depends on
+# `libredox` and `redox_users`, which do not compile for a developer host — `cargo test --lib` in
+# the parent fails on `libredox`, not on anything in this code. A policy nobody can run tests
+# against on the machine where it is written is a policy nobody will keep correct.
+#
+# So this crate `#[path]`-includes the same source files and nothing else. It has no dependencies
+# because `credpolicy` has none: std only, deliberately, so the identical code builds for the host
+# (the installer is a host tool) and for `*-unknown-redox` (the greeter is not).
+#
+#   cargo test --manifest-path credpolicy-hostcheck/Cargo.toml
+#
+# The same pattern, for the same reason, as `hostcheck/` in the `eos-users` fork.
+[package]
+name = "credpolicy-hostcheck"
+version = "0.0.0"
+edition = "2021"
+publish = false
+license = "AGPL-3.0-or-later"
+
+[workspace]
+
+# The lib target IS the vendored source, pointed at directly. An `#[path]` include from a
+# wrapper file does not work here: the modules use `crate::` paths, and under a wrapper `crate::`
+# resolves to the wrapper's root, not to credpolicy's. Naming the file as the crate root keeps
+# every `crate::` meaning what it says.
+[lib]
+# Named `userutils` on purpose. The doc examples inside the policy say
+# `use userutils::credpolicy::…`, because that is what a caller in the real fork writes. Giving
+# this crate the same library name makes those examples compile HERE too, so the doc-tests test
+# the text a reader will actually copy.
+name = "userutils"
+path = "src/lib.rs"

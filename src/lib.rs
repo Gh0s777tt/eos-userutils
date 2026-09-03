@@ -90,3 +90,13 @@ where
     fchown(fd, user.uid as u32, user.gid as u32)?;
     Ok(())
 }
+
+/// The E-OS credential policy: password strength, PIN rules and the PIN try counter.
+///
+/// One module rather than a second crate, because a package has exactly one library and the
+/// binaries here already import this one as `userutils`. Owner's decision Q3 (2026-09-03) put the
+/// policy "in this fork as a lib target"; this is that, expressed the way cargo allows.
+///
+/// std only, no dependencies: the identical source compiles for the host (the installer is a host
+/// tool) and for `*-unknown-redox` (the greeter is not).
+pub mod credpolicy;
