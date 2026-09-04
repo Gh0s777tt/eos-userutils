@@ -23,7 +23,7 @@
 //! | 8 | 100 000 000 | 16 days |
 //!
 //! Divide by the number of cores the attacker has. A six-digit PIN is not
-//! strong; it is *survivable*, and only because [`crate::credpolicy::counter::TryCounter`]
+//! strong; it is *survivable*, and only because [`crate::counter::TryCounter`]
 //! stops the attempts long before the keyspace runs out. That is why the floor
 //! is six digits and not four, and why a PIN may not protect anything an
 //! attacker can copy and attack offline.
@@ -38,8 +38,8 @@
 
 use std::time::Duration;
 
-use crate::credpolicy::entropy::minimal_period;
-use crate::credpolicy::GuessRate;
+use crate::entropy::minimal_period;
+use crate::GuessRate;
 
 /// Fewest digits a PIN may have.
 ///
@@ -71,7 +71,7 @@ const PIN_BLOCKLIST: [&str; 16] = [
 
 /// What is wrong with a PIN.
 ///
-/// Separate from [`crate::credpolicy::Problem`] on purpose: `NotDigits` and `DateLike` are
+/// Separate from [`crate::Problem`] on purpose: `NotDigits` and `DateLike` are
 /// meaningless for a password, and a shared enum would force every password
 /// caller to match arms that can never occur.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,7 +119,7 @@ pub struct PinAssessment {
     /// Everything wrong with it; empty means acceptable.
     pub problems: Vec<PinProblem>,
     /// i18n key for the message to show, resolved through
-    /// [`crate::credpolicy::guidance::text`].
+    /// [`crate::guidance::text`].
     pub guidance: &'static str,
 }
 
@@ -154,7 +154,7 @@ impl PinAssessment {
 /// Assess `pin` at the measured E-OS hash cost.
 ///
 /// ```
-/// use userutils::credpolicy::{assess_pin, pin::PinProblem};
+/// use eos_credpolicy::{assess_pin, pin::PinProblem};
 /// assert!(!assess_pin("123456").is_acceptable());
 /// assert!(assess_pin("12345").problems.contains(&PinProblem::TooShort { min: 6 }));
 /// assert!(assess_pin("284915").is_acceptable());
@@ -517,7 +517,7 @@ mod tests {
         // a presence check. It did -- `TooLong` returned `cred.pin.too_short`,
         // so a thirteen-digit PIN was told it was too short, in both languages.
         // Naming the expected key per input is what makes that visible.
-        use crate::credpolicy::guidance::{key_exists, text, Lang};
+        use crate::guidance::{key_exists, text, Lang};
         let cases: [(&str, &str); 11] = [
             ("", "cred.pin.not_digits"),
             ("12a456", "cred.pin.not_digits"),
@@ -536,14 +536,14 @@ mod tests {
             assert!(key_exists(key), "{pin:?} produced unknown key {key}");
             assert_eq!(key, expected, "{pin:?} got the wrong guidance key");
             // And the rendered text must not be the missing-key marker.
-            assert_ne!(text(key, Lang::Pl), crate::credpolicy::guidance::MISSING_KEY);
-            assert_ne!(text(key, Lang::En), crate::credpolicy::guidance::MISSING_KEY);
+            assert_ne!(text(key, Lang::Pl), crate::guidance::MISSING_KEY);
+            assert_ne!(text(key, Lang::En), crate::guidance::MISSING_KEY);
         }
     }
 
     #[test]
     fn a_too_long_pin_is_not_told_it_is_too_short() {
-        use crate::credpolicy::guidance::{text, Lang};
+        use crate::guidance::{text, Lang};
         let a = assess_pin("2849153729481");
         assert!(a.problems.contains(&PinProblem::TooLong { max: 12 }));
         assert_eq!(a.guidance, "cred.pin.too_long");
@@ -562,7 +562,7 @@ mod tests {
 
     #[test]
     fn the_unlock_only_message_exists_for_enrolment_screens() {
-        use crate::credpolicy::guidance::{key_exists, text, Lang};
+        use crate::guidance::{key_exists, text, Lang};
         assert!(key_exists("cred.pin.unlock_only"));
         assert!(text("cred.pin.unlock_only", Lang::En).contains("screen"));
         assert!(text("cred.pin.unlock_only", Lang::Pl).contains("ekran"));

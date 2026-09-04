@@ -99,4 +99,6 @@ where
 ///
 /// std only, no dependencies: the identical source compiles for the host (the installer is a host
 /// tool) and for `*-unknown-redox` (the greeter is not).
-pub mod credpolicy;
+// Re-exported under its old name so `userutils::credpolicy::…` keeps meaning what it meant
+// before the extraction; `passwd` and every other caller in this crate are unchanged.
+pub use eos_credpolicy as credpolicy;

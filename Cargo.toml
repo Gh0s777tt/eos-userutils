@@ -1,3 +1,10 @@
+[workspace]
+# `credpolicy` is a member so that a git dependency can find it by name: Cargo looks for the
+# requested package among a repository's workspace members, and a plain subdirectory is invisible
+# to it. `credpolicy-hostcheck` is gone -- it existed only to `#[path]`-include these same files so
+# they could be tested on a host, and a real package tests itself.
+members = ["credpolicy"]
+
 [package]
 name = "userutils"
 version = "0.1.0"
@@ -52,6 +59,7 @@ name = "usermod"
 path = "src/bin/usermod.rs"
 
 [dependencies]
+eos-credpolicy = { path = "credpolicy" }
 clap = "2.33.0"
 extra = { git = "https://gitlab.redox-os.org/redox-os/libextra.git" }
 orbclient = "0.4.1"

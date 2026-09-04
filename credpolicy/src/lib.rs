@@ -57,8 +57,8 @@
 //! # Example
 //!
 //! ```
-//! use userutils::credpolicy::{assess_password, GuessRate, PasswordPolicy, Verdict};
-//! use userutils::credpolicy::guidance::{text, Lang};
+//! use eos_credpolicy::{assess_password, GuessRate, PasswordPolicy, Verdict};
+//! use eos_credpolicy::guidance::{text, Lang};
 //!
 //! let a = assess_password("poziomka zielona kotwica");
 //! assert_eq!(a.score, 4);
@@ -444,9 +444,9 @@ impl PasswordPolicy {
 /// in exactly one place and cannot quietly change what a score means.
 ///
 /// ```
-/// let a = userutils::credpolicy::assess_password("password");
+/// let a = eos_credpolicy::assess_password("password");
 /// assert_eq!(a.score, 0);
-/// assert!(a.problems.contains(&userutils::credpolicy::Problem::Blocklisted));
+/// assert!(a.problems.contains(&eos_credpolicy::Problem::Blocklisted));
 /// ```
 pub fn assess_password(password: &str) -> Assessment {
     assess_password_at(password, GuessRate::EOS_IMAGE_ARGON2ID_ONE_CORE)

@@ -6,8 +6,8 @@
 //! # Cost, measured rather than asserted
 //!
 //! Every loop here is linear or `n log n` in the number of characters, and
-//! [`crate::credpolicy::assess_password`] never hands it more than
-//! [`crate::credpolicy::MAX_PASSWORD_LEN`] of them, so the cost per keystroke is bounded by
+//! [`crate::assess_password`] never hands it more than
+//! [`crate::MAX_PASSWORD_LEN`] of them, so the cost per keystroke is bounded by
 //! a constant no matter what is pasted into the field.
 //!
 //! That sentence used to read "cheaply enough to run on every keystroke in the
@@ -42,8 +42,8 @@
 //! | `abcdefghijkl` → 56 bits | one guess | sequence weights |
 //! | `abababababab` → 56 bits | ~two guesses | period cap |
 //!
-//! Nothing here consults a dictionary; that is [`crate::credpolicy::blocklist`]'s job. The
-//! two are combined in [`crate::credpolicy::assess_password`].
+//! Nothing here consults a dictionary; that is [`crate::blocklist`]'s job. The
+//! two are combined in [`crate::assess_password`].
 
 /// A character that repeats the one before it costs a quarter of a character.
 ///

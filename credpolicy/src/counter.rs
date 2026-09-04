@@ -27,7 +27,7 @@
 //! An attacker who can corrupt the file must not thereby clear it.
 //!
 //! ```
-//! use userutils::credpolicy::counter::{LockoutPolicy, Lockout, TryCounter};
+//! use eos_credpolicy::counter::{LockoutPolicy, Lockout, TryCounter};
 //! let policy = LockoutPolicy::default();
 //! let mut c = TryCounter::fresh("/tmp/does-not-matter");
 //! for attempt in 0..4 {
@@ -64,7 +64,7 @@ pub struct LockoutPolicy {
 impl Default for LockoutPolicy {
     /// Three free tries, then 5 s doubling to a 15 min ceiling, hard lock at 10.
     ///
-    /// At [`crate::credpolicy::GuessRate::EOS_IMAGE_ARGON2ID_ONE_CORE`] a six-digit PIN
+    /// At [`crate::GuessRate::EOS_IMAGE_ARGON2ID_ONE_CORE`] a six-digit PIN
     /// takes 3.9 h to exhaust offline. Online, against this policy, ten guesses
     /// cost 5+10+20+40+80+160+320 s ≈ 10.6 min and then stop entirely — which
     /// is the whole reason a six-digit PIN is allowed to unlock a screen at all.
@@ -617,7 +617,7 @@ mod tests {
 
     #[test]
     fn lockout_guidance_keys_exist() {
-        use crate::credpolicy::guidance::key_exists;
+        use crate::guidance::key_exists;
         let policy = LockoutPolicy::default();
         let mut c = TryCounter::fresh("unused");
         for _ in 0..4 {

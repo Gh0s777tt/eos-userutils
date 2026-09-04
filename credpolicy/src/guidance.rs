@@ -1,14 +1,14 @@
 //! Message keys and their Polish and English strings.
 //!
-//! The assessors return a **key**, never prose ([`crate::credpolicy::Assessment::guidance`]).
+//! The assessors return a **key**, never prose ([`crate::Assessment::guidance`]).
 //! Five front-ends have to say the same thing — `passwd`, `login`, the
 //! `orblogin` greeter, the sudo daemon and `eos-control` — and three of them
 //! draw text in a GUI while two write to a TTY. A key lets each render it its
 //! own way and lets the strings be translated without touching the policy.
 //!
 //! ```
-//! use userutils::credpolicy::guidance::{text, Lang};
-//! let a = userutils::credpolicy::assess_password("eos");
+//! use eos_credpolicy::guidance::{text, Lang};
+//! let a = eos_credpolicy::assess_password("eos");
 //! assert_eq!(a.guidance, "cred.pw.too_short");
 //! assert!(text(a.guidance, Lang::Pl).contains("12"));
 //! ```

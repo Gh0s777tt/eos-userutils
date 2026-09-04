@@ -52,8 +52,8 @@
 //! green window`. The rule and the measurements behind its two constants are in
 //! `is_dominated_by_common_words`.
 
-use crate::credpolicy::blocklist_data::BLOCKLIST;
-use crate::credpolicy::blocklist_supplement::SUPPLEMENT;
+use crate::blocklist_data::BLOCKLIST;
+use crate::blocklist_supplement::SUPPLEMENT;
 
 /// Shortest entry in either table; shorter candidates are not looked up.
 ///
@@ -67,7 +67,7 @@ const MIN_CANDIDATE_LEN: usize = 3;
 /// input turning one keystroke into unbounded work in the greeter", and that
 /// was false: the work was in building each candidate and in the period scan
 /// above the lookups, both of which grew with the input, not with this number.
-/// What actually bounds the work is [`crate::credpolicy::MAX_PASSWORD_LEN`], applied to
+/// What actually bounds the work is [`crate::MAX_PASSWORD_LEN`], applied to
 /// this module's input in [`candidates`].
 const MAX_CANDIDATES: usize = 12;
 
@@ -88,9 +88,9 @@ const DOMINATED_MAX_TOKENS: usize = 2;
 /// Is this password, in any of its normalised forms, a known common password?
 ///
 /// ```
-/// assert!(userutils::credpolicy::blocklist::contains("password"));
-/// assert!(userutils::credpolicy::blocklist::contains("P@ssw0rd!2026"));
-/// assert!(!userutils::credpolicy::blocklist::contains("xkq7wm2ptz9lr4bv6nc8"));
+/// assert!(eos_credpolicy::blocklist::contains("password"));
+/// assert!(eos_credpolicy::blocklist::contains("P@ssw0rd!2026"));
+/// assert!(!eos_credpolicy::blocklist::contains("xkq7wm2ptz9lr4bv6nc8"));
 /// ```
 pub fn contains(password: &str) -> bool {
     candidates(password).iter().any(|c| in_any_table(c)) || is_dominated_by_common_words(password)
@@ -202,10 +202,10 @@ fn dominated(tokens: &[String]) -> bool {
 /// The alphanumeric words of a password, lower-cased and de-accented.
 ///
 /// Splitting on runs of non-alphanumeric characters is what looks *inside* a
-/// separator. Input is capped at [`crate::credpolicy::MAX_PASSWORD_LEN`] before any of the
+/// separator. Input is capped at [`crate::MAX_PASSWORD_LEN`] before any of the
 /// allocating work, so this is bounded no matter what is pasted in.
 pub fn alnum_tokens(password: &str) -> Vec<String> {
-    let capped: String = password.chars().take(crate::credpolicy::MAX_PASSWORD_LEN).collect();
+    let capped: String = password.chars().take(crate::MAX_PASSWORD_LEN).collect();
     deaccent(&capped.to_lowercase())
         .split(|c: char| !c.is_alphanumeric())
         .filter(|t| !t.is_empty())
@@ -236,7 +236,7 @@ pub fn candidates(password: &str) -> Vec<String> {
 
     // Cap first, before `to_lowercase` allocates: this is the bound that makes
     // the module's cost per keystroke constant (see MAX_CANDIDATES).
-    let capped: String = password.chars().take(crate::credpolicy::MAX_PASSWORD_LEN).collect();
+    let capped: String = password.chars().take(crate::MAX_PASSWORD_LEN).collect();
 
     let lower = capped.to_lowercase();
     push(&mut out, lower.clone());
@@ -253,7 +253,7 @@ pub fn candidates(password: &str) -> Vec<String> {
     // `passwordpassword` is `password` twice, and neither the floor nor a
     // dictionary lookup of the whole string catches it.
     let chars: Vec<char> = stripped.chars().collect();
-    let period = crate::credpolicy::entropy::minimal_period(&chars);
+    let period = crate::entropy::minimal_period(&chars);
     if period < chars.len() {
         let block: String = chars[..period].iter().collect();
         push(&mut out, deleet(&block));
